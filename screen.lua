@@ -634,4 +634,10 @@ function PegSolitaireScreen:_updateButtons()
     if self.restart_btn then self.restart_btn:enableDisable(self.board:canUndo()) end
 end
 
+-- The puzzle bank and pagoda functions are only needed while a game is
+-- open: drop them when the screen closes (the next game reads them again).
+function PegSolitaireScreen:onCloseWidget()
+    Puzzles.release()
+end
+
 return PegSolitaireScreen

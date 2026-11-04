@@ -299,6 +299,45 @@ describe("PegBoard", function()
         assert.are.equal("yes", b:knownState())
     end)
 
+    it("stops a search at its time cap and answers unknown", function()
+        -- A deadline already past stops the search at its first clock check
+        -- (every 1024 nodes); the full classic board needs far more nodes.
+        local b = newBoard("en_classic")
+        local st, path, nodes = b:getSolver():solve(b.start, math.huge, os.clock() - 1)
+        assert.are.equal("unknown", st)
+        assert.is_nil(path)
+        assert.are.equal(1024, nodes)
+        -- With time, the same solver (memo intact) still proves it solvable.
+        local st2, path2 = b:getSolver():solve(b.start, math.huge)
+        assert.are.equal("yes", st2)
+        assert.is_true(Solver.check(b.geo, b.start, b.goal, path2))
+    end)
+
+    it("keeps hints within the Kobo time cap (simulated)", function()
+        local keep = PegBoard.time_scale
+        PegBoard.time_scale = 0.04         -- a Kobo is ~25x slower
+        local worst = 0
+        for _, pz in ipairs(Puzzles.all()) do
+            for s = 1, 3 do
+                math.randomseed(s * 31)
+                local b = PegBoard:new()
+                b:setPuzzle(pz)
+                for _ = 1, s + 1 do
+                    local legal = {}
+                    for m = 1, b.geo.nmoves do if b:isLegal(m) then legal[#legal + 1] = m end end
+                    if #legal == 0 then break end
+                    b:jump(legal[math.random(#legal)])
+                end
+                local t0 = os.clock()
+                b:analyze()
+                worst = math.max(worst, os.clock() - t0)
+            end
+        end
+        PegBoard.time_scale = keep
+        -- 2.5 s x 0.04 = 100 ms, with a margin for a loaded machine.
+        assert.is_true(worst < 0.3)
+    end)
+
     it("falls back to a known position when the solver can't tell", function()
         local b = newBoard("en_classic")
         local keep = PegBoard.REWIND_BUDGET

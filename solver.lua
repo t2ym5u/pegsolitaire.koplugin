@@ -123,7 +123,12 @@ end
 --   "no"          -- proved impossible
 --   "unknown"     -- the budget ran out first
 -- plus the number of nodes visited.
-function Solver:solve(pegs, budget)
+-- deadline (optional): an os.clock() time past which the search also stops
+-- with "unknown" -- node rates differ ~25x between a desktop and an
+-- e-reader, so the node budget alone cannot bound the wait.
+-- on_progress (optional): called now and then with the fraction of the time
+-- to the deadline already spent (for a progress bar).
+function Solver:solve(pegs, budget, deadline, on_progress)
     local geo = self.geo
     local n, goal = geo.n, self.goal
     local A, B, C = geo.A, geo.B, geo.C
@@ -162,11 +167,19 @@ function Solver:solve(pegs, budget)
     local nodes, aborted = 0, false
     local path = {}
     local on_dead = self.on_dead
+    local clock = os.clock
+    local t0 = clock()
+    local span = deadline and math.max(deadline - t0, 1e-6)
 
     local function dfs(depth, left)
         nodes = nodes + 1
         if left == 1 then return P[goal] == 1 end
         if nodes > budget then aborted = true return false end
+        if deadline and nodes % 1024 == 0 then
+            local now = clock()
+            if now > deadline then aborted = true return false end
+            if on_progress then on_progress((now - t0) / span) end
+        end
         local ck = K[1]
         for s = 2, S do
             if K[s] < ck then ck = K[s] end

@@ -29,11 +29,28 @@ local PegBoard = {}
 PegBoard.__index = PegBoard
 
 -- Node budgets for the on-device solver (about 0.1 s per 100 000 nodes on a
--- desktop, roughly ten times that on a 2013 e-reader). The memo is kept, so a
+-- desktop, roughly 25 times that on a Kobo Aura). The memo is kept, so a
 -- second question about the same position goes further than the first.
 PegBoard.HINT_BUDGET   = 250000
 PegBoard.WARN_BUDGET   = 60000
 PegBoard.REWIND_BUDGET = 60000
+
+-- CPU-time caps (os.clock seconds) on the same searches: whichever of the
+-- node budget and the time cap comes first stops the search ("can't tell
+-- quickly"). On a desktop the node budgets bind; on an e-reader the caps do,
+-- so that no single question keeps the reader waiting more than ~2.5 s
+-- (250 000 nodes took ~5 s on a Kobo).
+PegBoard.HINT_TIME   = 2.5    -- a hint
+PegBoard.WARN_TIME   = 1.0    -- the check after each jump ("Warn if unsolvable")
+PegBoard.REWIND_TIME = 1.5    -- all of lastGoodDepth's searches together
+PegBoard.THINK_TIME  = 6.0    -- "Think longer", asked for explicitly (progress bar)
+-- Multiplies every cap above; test harnesses set it to ~0.04 to reproduce on
+-- a desktop what a Kobo searches in the same time.
+PegBoard.time_scale = 1
+
+local function deadlineIn(seconds)
+    return os.clock() + seconds * PegBoard.time_scale
+end
 
 function PegBoard:new()
     return setmetatable({
@@ -242,7 +259,8 @@ function PegBoard:_learnPath(pegs, path)
 end
 
 -- "yes" plus the rest of a solution, "no", or "unknown" for position `pegs`.
-function PegBoard:analyzeAt(pegs, budget)
+-- deadline, on_progress: see Solver:solve.
+function PegBoard:analyzeAt(pegs, budget, deadline, on_progress)
     local key = Geometry.encode(pegs)
     local k = self.known[key]
     if k == "no" then return "no" end
@@ -258,7 +276,7 @@ function PegBoard:analyzeAt(pegs, budget)
         self.known[key] = "no"
         return "no"
     end
-    local st, path = self:getSolver():solve(pegs, budget)
+    local st, path = self:getSolver():solve(pegs, budget, deadline, on_progress)
     if st == "yes" then
         self:_learnPath(pegs, path)
     elseif st == "no" then
@@ -267,8 +285,10 @@ function PegBoard:analyzeAt(pegs, budget)
     return st, path
 end
 
-function PegBoard:analyze(budget)
-    return self:analyzeAt(self.pegs, budget or PegBoard.HINT_BUDGET)
+-- seconds: time cap (default HINT_TIME, before time_scale).
+function PegBoard:analyze(budget, seconds, on_progress)
+    return self:analyzeAt(self.pegs, budget or PegBoard.HINT_BUDGET,
+        deadlineIn(seconds or PegBoard.HINT_TIME), on_progress)
 end
 
 -- What is known about the current position without searching.
@@ -285,7 +305,7 @@ function PegBoard:warnCheck()
         self.warn_state = nil
         return nil
     end
-    self.warn_state = self:analyze(PegBoard.WARN_BUDGET)
+    self.warn_state = self:analyze(PegBoard.WARN_BUDGET, PegBoard.WARN_TIME)
     return self.warn_state
 end
 
@@ -298,13 +318,14 @@ PegBoard.REWIND_SEARCHES = 4
 function PegBoard:lastGoodDepth()
     local P = { unpack(self.pegs) }
     local searches = 0
+    local deadline = deadlineIn(PegBoard.REWIND_TIME)
     for d = #self.history - 1, 0, -1 do
         self:_revert(self.history[d + 1], P)
         local k = self.known[Geometry.encode(P)]
         if type(k) == "table" then return d end
-        if k == nil and searches < PegBoard.REWIND_SEARCHES then
+        if k == nil and searches < PegBoard.REWIND_SEARCHES and os.clock() < deadline then
             searches = searches + 1
-            if self:analyzeAt(P, PegBoard.REWIND_BUDGET) == "yes" then return d end
+            if self:analyzeAt(P, PegBoard.REWIND_BUDGET, deadline) == "yes" then return d end
         end
     end
     return 0
@@ -327,7 +348,7 @@ end
 function PegBoard:findHint()
     if self:isWon() then return nil, "complete" end
     if self:isOver() then return nil, "no" end
-    local st, path = self:analyze(PegBoard.HINT_BUDGET)
+    local st, path = self:analyze(PegBoard.HINT_BUDGET, PegBoard.HINT_TIME)
     if st ~= "yes" or not path[1] then return nil, st end
     local m = path[1]
     return { kind = "fill", r = self.geo.A[m], c = self.geo.C[m], m = m }

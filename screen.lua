@@ -23,6 +23,7 @@ local T               = require("ffi/util").template
 
 local ScreenBase  = require("screen_base")
 local DailySeed   = require("daily_seed")
+local GenProgress = require("gen_progress")
 local MenuHelper  = require("menu_helper")
 local Geometry    = lrequire("geometry")
 local PegBoard    = lrequire("board")
@@ -131,8 +132,15 @@ function PegSolitaireScreen:init()
         end
         self:_startPuzzle(first)
     elseif self:_warnOn() then
-        -- A restored game gets its warning back at once.
-        self.board:warnCheck()
+        -- A restored game gets its warning back -- once the screen is up,
+        -- so the check (up to a second on an e-reader) never delays it.
+        local board = self.board
+        UIManager:tickAfterNext(function()
+            if self.board ~= board or board:isOver() or board:isShowingSolution() then return end
+            board:warnCheck()
+            self:_updateButtons()
+            self:updateStatus()
+        end)
     end
     ScreenBase.init(self)
 end
@@ -393,8 +401,16 @@ function PegSolitaireScreen:onHint()
     if b:isShowingSolution() or b:isOver() then
         return ScreenBase.onHint(self)
     end
-    if not b:knownState() then self:_flash(_("Thinking…")) end
-    self:_onAnalysis(b:analyze())
+    local st
+    if b:knownState() then
+        st = b:analyze()
+    else
+        self:_flash(_("Thinking…"))
+        st = GenProgress.run(function(on_progress)
+            return (b:analyze(nil, nil, on_progress))
+        end, { title = _("Thinking…") })
+    end
+    self:_onAnalysis(st)
 end
 
 -- The second half of onHint, once the solver has answered `st`.
@@ -446,7 +462,11 @@ end
 -- one proved, so this goes further rather than starting over.
 function PegSolitaireScreen:onThinkLonger()
     self:_flash(_("Thinking…"))
-    self:_onAnalysis(self.board:analyze(PegBoard.HINT_BUDGET * 4))
+    local b = self.board
+    local st = GenProgress.run(function(on_progress)
+        return (b:analyze(PegBoard.HINT_BUDGET * 4, PegBoard.THINK_TIME, on_progress))
+    end, { title = _("Thinking…") })
+    self:_onAnalysis(st)
 end
 
 function PegSolitaireScreen:onShowSolution()

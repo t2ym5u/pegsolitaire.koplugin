@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-11-04
+
+### Changed
+- A hint never searches for more than about 2.5 s on an e-reader (it could
+  take 5 s on a Kobo), and shows a progress bar when it takes a moment. In
+  the rare position it can't settle in that time, it says "Can't tell
+  quickly" and offers "Think longer" (up to 6 s, with a progress bar).
+- The "Warn if unsolvable" check after each jump is capped at about 1 s,
+  and when a saved game is reopened it runs once the board is on screen
+  instead of delaying the opening.
+- Finding the last solvable position to go back to is capped at 1.5 s.
+
 ## [1.0.3] - 2026-11-03
 
 ### Changed

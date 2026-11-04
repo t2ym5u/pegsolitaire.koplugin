@@ -85,4 +85,15 @@ function Puzzles.pagodas(board, goal)
     return pagodas[board .. ":" .. goal] or {}
 end
 
+-- Which data files are loaded (for tests): bank, pagodas.
+function Puzzles.isLoaded()
+    return bank ~= nil, pagodas ~= nil
+end
+
+-- Drops the puzzle bank and the pagoda functions; the next call reads them
+-- again (~2 ms).
+function Puzzles.release()
+    bank, by_id, pagodas = nil, nil, nil
+end
+
 return Puzzles

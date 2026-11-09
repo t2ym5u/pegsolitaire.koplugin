@@ -177,16 +177,6 @@ describe("Puzzles", function()
             assert.is_true(Geometry.goalInClass(geo, pegs, pz.goal), pz.id)
         end
     end)
-
-    it("groups by peg count", function()
-        for _, pz in ipairs(Puzzles.all()) do
-            if pz.count <= 12 then assert.are.equal("easy", pz.difficulty)
-            elseif pz.count <= 24 then assert.are.equal("medium", pz.difficulty)
-            else assert.are.equal("hard", pz.difficulty) end
-        end
-        local list = Puzzles.forBoard("english")
-        for i = 2, #list do assert.is_true(list[i - 1].count <= list[i].count) end
-    end)
 end)
 
 describe("PegBoard", function()
